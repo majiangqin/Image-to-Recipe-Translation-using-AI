@@ -1,0 +1,986 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Include other packages here, before hyperref.
+
+% If you comment hyperref and then uncomment it, you should delete
+% egpaper.aux before re-running latex.  (Or just hit 'q' on the first latex
+% run, let it finish, and you should be clear).
+\usepackage[pagebackref=true,breaklinks=true,letterpaper=true,colorlinks,bookmarks=false]{hyperref}
+
+\cvprfinalcopy % *** Uncomment this line for the final submission
+
+\def\cvprPaperID{****} % *** Enter the CVPR Paper ID here
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+
+% Pages are numbered in submission mode, and unnumbered in camera-ready
+% \ifcvprfinal\pagestyle{empty}\fi
+\begin{document}
+
+%%%%%%%%% TITLE
+\title{Deep Image-to-Recipe Translation\\
+DeepChef: CS 7643}
+
+
+\author{Jiangqin Ma, Bilal Mawji, Franz Williams\\
+Georgia Institute of Technology\\
+{\tt\small \{jma416, bmawji3, fwilliams70\}@gatech.edu}
+% For a paper whose authors are all at the same institution,
+% omit the following lines up until the closing ``}''.
+% Additional authors and addresses can be added with ``\and'',
+% just like the second author.
+% To save space, use either the email address or home page, not both
+% \and
+% Jiangqin Ma\\
+% Georgia Institute of Technology\\
+% {\tt\small jma416@gatech.edu}
+% \and
+% Third auther\\
+% Institution\\
+% Institution address\\
+% {\tt\small firstauthor@i1.org}
+}
+
+
+\maketitle
+%\thispagestyle{empty}
+
+%%%%%%%%% ABSTRACT
+\begin{abstract}
+The modern saying, "You Are What You Eat," resonates on a profound level, reflecting the intricate connection between our identities and the food we consume. Our project, Deep Image-to-Recipe Translation, is an intersection of computer vision and natural language generation that aims to bridge the gap between cherished food memories and the art of culinary creation. Our primary objective involves predicting ingredients from a given food image. For this task, we first develop a custom convolutional network and then compare its performance to a model that leverages transfer learning. We pursue an additional goal of generating a comprehensive set of recipe steps from a list of ingredients. We frame this process as a sequence-to-sequence task and develop a recurrent neural network that utilizes pre-trained word embeddings.
+
+% Our journey involves meticulous data preprocessing, including image cleaning, image augmentation, and ingredient list refinement to ensure the first model's effective training.
+% our model architecture is crafted with consideration for the intricacies of the dataset. The data, sourced from Kaggle and refined for quality, presents a pragmatic compromise between scale and hardware limitations.
+
+% In Stage 2, the introduction of a pre-trained LSTM-based neural network brings us closer to the comprehensive generation of cooking instructions from a list of predicted ingredients. Tokenization, embedding layers, and advanced architectural components contribute to the model's ability to provide coherent and contextually relevant instructions.
+
+% The experimentation and results section presents a detailed analysis of our model's performance, 
+We address several challenges of deep learning including imbalanced datasets, data cleaning, overfitting, and hyperparameter selection. Our approach emphasizes the importance of metrics such as Intersection over Union (IoU) and F1 score in scenarios where accuracy alone might be misleading. For our recipe prediction model, we employ perplexity, a commonly used and important metric for language models. We find that transfer learning via pre-trained ResNet-50 weights and GloVe embeddings provide an exceptional boost to model performance, especially when considering training resource constraints.
+
+Although we have made progress on the image-to-recipe translation, there is opportunity for future exploration with advancements in model architectures, dataset scalability, and enhanced user interaction.
+\end{abstract}
+
+%%%%%%%%% BODY TEXT
+\section{Introduction}
+
+Just as the saying goes, "You Are What You Eat," the meaning behind this phrase is truer in more ways than one. While our bodies are composed of the nutrients we consume, our identities are also shaped by the ingredients, the preparation, and the cooking of food we make daily. Recipes that have been passed down generation to generation have meaning in our lives – they are the fond memories of family members who have shared meals with us. 
+
+% For someone who has lost their old recipe or for someone else starting life in a new city or a new country, they may not have access to a recipe of their favorite dish. All that they have is a picture of them smiling with a relative eating their favorite food. 
+
+The goal of Deep Image-to-Recipe Translation is to give those who have pictures of their favorite dishes a chance to recreate a recipe for such a dish when they do not have the recipe in their possession. We seek to provide a set of ingredients and cooking instructions for a recipe that matches the food in a provided image. We would hope to give someone a chance to enjoy the same bite of food that their mother made for them years ago when they were a child.
+
+This technique could be used by both novice cooks and professional chefs alike. One of the first things typically asked when experiencing an amazing dish is \emph{"How did you make it?"} --- the fascination and desire to recreate a dish from a fond memory is an all too common human experience. Development of an Image-to-Recipe Translation system would give people around the world the ability to recreate their cherished dishes and memories.
+
+The task of generating ingredients and cooking instructions from an image is an intersection of two machine learning fields: computer vision (CV) and natural language generation (NLG). Deep CV methods have improved considerably since the advent of convolutional layers. Deep NLG has traditionally used recurrent layers, but more recently, attention-based methods have proven to be more powerful. Transfer learning also allows for reuse of previously trained networks to extract bottleneck features as part of a deep learning pipeline. We draw inspiration from and seek to reproduce aspects of the architecture found in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}.
+
+% \url{https://www.kaggle.com/datasets/pes12017000148/food-ingredients-and-recipe-dataset-with-images}
+Our dataset comes from Kaggle \cite{Goel_Desai_Tanvi_2021_Kaggle} where the data was compiled by scraping the Epicurious website and specifically recipes with images attached to them. This dataset has been used in both academic and research settings and is also well-documented and of high quality. Each instance in the data consists of an ID number, a title, an ingredients list, an instructions list, an image name, and a cleaned ingredients list. There are in total around 13,500 instances within our dataset. Each instance's image name maps to an image file provided with the dataset. While this dataset was mostly clean, there were a few instances that contained null values which were removed as part of a data cleaning step. Additionally, extra preprocessing steps were also needed to clean the ingredients prior to filtering out stop words.
+
+It's important to note that our dataset is more limited in scale (approximately 240 Megabytes) than other datasets such as Recipe1M (500 Gigabytes), which was used in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}. The performance of deep learning models often benefits from extensive data. While our dataset constraints may contribute to the model's current limitations, it is a pragmatic compromise given hardware limitations.
+
+Furthermore, the targets for our dataset were the list of ingredients and instructions. As previously mentioned, while reviewing the dataset, we came across the fact that our ingredients list needed to be refined to capture a better level of information.
+
+Lastly, our work was inspired by researchers at Meta who have worked on a similar project. Meta researchers utilized similar models such as Convolutional Neural Networks (CNNs) and Recurrent Neural Networks (RNNs) for the type of data we use, but the implementations do differ. In the research done by Meta in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}, they reference existing solutions for this task that rely on retrieval-based methods. In their words, "a recipe is retrieved from a fixed dataset based on the image similarity score in an embedding space". While this is a good method for predicting ingredients from an image, the researchers in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2} also mention that a good embedding system is required for retrieval to function correctly. One such limitation is that when an image cannot be found in the dataset, it can make retrieval for that recipe an impossible task.
+
+% \textbf{(5 points - we can refine this part and get to the point if we are low on space) What did you try to do? What problem did you try to solve? Articulate your objectives using absolutely no jargon.} The task we seek to solve in Deep Image-to-Recipe Translation is to generate a list of ingredients and instructions for a given recipe image.
+
+% \textbf{(5 points - this part is covered, but we should add some more limitations) How is it done today, and what are the limits of current practice?}
+
+% \textbf{(5 points - we have potentially included this in the beginning portion, but is this a valid point to make?) Who cares? If you are successful, what difference will it make?}
+
+% \textbf{(5 points)} What data did you use? Provide details about your data, specifically choose the most important aspects of your data mentioned \href{https://arxiv.org/abs/1803.09010}{here}. You don’t have to choose all of them, just the most relevant.
+%-------------------------------------------------------------------------
+%------------------------------------------------------------------------
+\section{Approach}
+
+Our approach to Image-to-Recipe Translation is composed of two stages. Stage 1 is our primary objective and involves predicting ingredients from a food image. Stage 2 involves generation of a full set of recipe steps and recipe title from the food image and predicted ingredients list. For this project, we utilized the TensorFlow deep learning library and its Keras high-level interface. Additionally, Scikit-learn, Pandas, Seaborn, and Matplotlib were used for data prepration, metrics, and visualization.
+
+One problem we anticipated was the time required to train our ingredient prediction models. Both our custom CNN and ResNet-50 architectures involve convolutional layers, which are known to be computationally expensive. A second concern was our dataset size --- while many deep learning solutions rely on a large dataset, such a dataset would prevent us from training a model given our time constraints.
+
+\subsection{Stage 1: Ingredient Prediction}
+
+\subsubsection{Data collection and preprocessing}
+For Stage 1, we augmented our data and preprocessed food images in an effort to improve our model's generalization. Our preprocessing involved resizing, normalizing, cropping, mirroring, rotating, flipping, and whitening images. Additionally, it came to our attention that we needed to refine each recipe's ingredients list. We preprocessed ingredients by merging those that either share two words at the start or end of their name as in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}. This reduces ingredients to more basic forms; for instance, “finely grated cheese” and “coarsely grated cheese” both become “grated cheese” with this merging scheme. After this initial ingredient preprocessing, we were left with a set of around 1,500 ingredients.
+
+However, after an initial model evaluation, we realized that further ingredient refinement was required to improve model predictions. To accomplish this, certain word fragments and filler words (\eg "and," "or," and "the") were removed. Additionally, adjectives of the ingredients themselves were completely removed to the best of our ability. For example, words like "creamy", "superfine", and "freshly" did not add value to their base ingredients and instead only added complexity for our model to produce useful ingredient predictions. Cooking utensils and containers like "jars" and "skillet" are generally useful when preparing a recipe, but we chose to remove these as ingredients and instead focused on edible ingredients.
+
+We found that adjectives involving the color, origin, and quantity of ingredients also contributed to the complexity of ingredient prediction. A decision was made that color remains an important distinction, like that of red peppers versus green peppers, but geographic adjectives (such as country of origin) were of lesser importance. We combine occurrences of quantity (\eg "1 pound bananas" or "2 cups bananas") and plurals (\eg "carrot" versus "carrots") into single ingredients. Finally, we further restrict the list of ingredients to the top 1\% frequently occurring ingredients. After these refinements, our ingredients list consisted of around 200 mostly unique items.
+
+\subsubsection{Ingredient model architecture}
+
+For ingredient prediction, we compared a custom CNN against a model that utilized a pre-trained ResNet-50 model as a feature extractor. We were inspired to do this through lectures in class as well as the research performed by researchers in \cite{recipe1707}. Here, researchers used a ResNet-50 model that was pre-trained on ImageNet and showed improved performance in metrics. Rather than multi-class classification, our ingredient prediction is framed as a multi-label classification problem where the outputs of each model represent confidences for each ingredient. Both models receive a 200-by-200 food image as input.
+
+Our custom CNN model architecture utilizes multiple convolutional blocks followed by a flatten layer, a fully-connected hidden layer with 256 neurons, and a fully-connected ingredient prediction layer. Each convolutional block is composed of the following sequence of layers: a 3x3 convolution with an increasing number of filters in each block and ReLU activation, a batch normalization layer, and a 2x2 max pooling layer (See Figures 10 and 11 in the appendix). This model also utilized L2 regularization and dropout as a measure to boost generalization and alleviate overfitting.
+
+Our ResNet-50-based model architecture takes advantage of transfer learning by reusing ResNet-50 trained on the ImageNet dataset. The ResNet-50 model is frozen and it's classification layer is removed and replaced with a dropout layer and a trainable fully-connected ingredient prediction layer.
+
+The custom CNN architecture has learned parameters in its convolutional, fully connected, and batch normalization layers. Its pooling and flatten layers do not contain any learned parameters. Within the ResNet-50 architecture, the final ingredient prediction layer is the only layer that contains learnable parameters, as we utilized ResNet-50 as a fixed feature extractor. This means that despite our custom model having fewer parameters overall, it had more learnable parameters than our ResNet-50-powered model.
+
+As both of our models were tasked with predicting ingredients from images, we employ sigmoid activation in the output layers of each model and binary cross-entropy as our loss function, as it is suitable for multi-label classification scenarios. Additionally, both of our models were updated using the Adam optimizer, as it tends to converge faster \cite{kingma2017adam}.
+
+\subsubsection{Ingredient model training procedure}
+
+Multiple model architectures and hyperparameters were trained and evaluated for both our custom CNN model and our ResNet-50-powered model. While experimenting, accuracy proved to be a poor evaluation metric due to an imbalance in ingredient occurrence. Due to this, F1 score was chosen as one of our evaluation metrics. As in \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}, we also employed Intersection over Union (IoU) as an evaluation metric, as it is an intuitive measure of multi-label classification performance. During experimentation, we noticed the shapes of both F1 and IoU curves were similar, and so we ultimately decided on IoU as our primary ingredient prediction metric.
+
+When accuracy is low and F1 and IoU scores are comparatively better, it suggests that our model might be handling certain ingredients well while struggling with others. This scenario is common in imbalanced datasets or when some classes are inherently more challenging for the model to predict accurately. F1 score and IoU, being more sensitive to minority classes, can better reflect the model's performance. F1 score and IoU are also threshold-dependent metrics, meaning that they can vary based on the threshold used to determine positive predictions. In our usage of these metrics, we chose 0.5 (a 50\% confidence rate) as our threshold.
+
+Our dataset was first split into a training and testing set at a 80/20 ratio. 20\% of the training set was further reserved as validation data. Model hyperparameters were chosen uniformally using random search, and validation IoU scores were compared across all runs. Each model was trained for a maximum of 25 epochs on the training set, and early stopping was employed to prevent overfitting.
+
+Following suggestions left by researchers in \cite{recipe1707} and \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2}, as well as utilizing methods taught in our lectures, we were fairly confident in our approach. However, throughout our experiments, we realized that data cleaning and hyperparameter tuning would have a large impact on our model's performance.
+
+% \textbf{(10 points)} What did you do exactly? How did you solve the problem? Why did you think it would be successful? Is anything new in your approach?
+
+% \textbf{(5 points)} What problems did you anticipate? What problems did you encounter? Did the very first thing you tried work? 
+
+% \textbf{Important: Mention any code repositories (with citations) or other sources that you used, and specifically what changes you made to them for your project. }
+
+
+%-------------------------------------------------------------------------
+
+
+\subsection{Stage 2: Instruction Generation}
+
+\subsection{Model architecture}
+In Stage 2, our goal was to train a Long-Short Term Memory (LSTM) model to provide coherent and contextually relevant cooking instructions based on an input ingredient list, serving as a valuable tool for recipe generation. While several instruction generation architectures were explored, we primarily compared the performance of two models. Our first instruction generation model learns a set of embeddings and uses a standard LSTM layer. Our second model utilizes pre-trained GloVe embeddings \cite{pennington-etal-2014-glove}, a bidirectional LSTM layer, and also employs L2 regularization, dropout, and layer normalization. Both models include a final time distributed fully-connected layer for instruction token prediction.
+
+\subsubsection{Data Processing}
+Two tokenizers are created: one for the ingredient vocabulary, and one for the instruction vocabulary. Sequences of ingredients and instructions are then transformed by their respective tokenizers, and are padded to the length of the longest sequence in each dataset, ensuring a uniform sequence length. A custom data generator is implemented for efficient batch processing during training.
+
+% \textbf{Tokenization:}
+% Ingredients are tokenized using a Tokenizer, accommodating a vocabulary size determined by the unique words in the ingredient dataset. Instructions are tokenized separately, handling cooking instructions with a vocabulary size specific to the instruction dataset.
+
+% \textbf{Padding:}
+% Sequences are padded to the length of the longest sequence in each dataset, ensuring uniform input dimensions.
+
+% \textbf{Data Generation:}
+% A custom data generator is implemented for efficient batch processing during training.
+% \subsubsection{Model Architecture}
+
+% \textbf{Embedding Layer:}
+% Utilizes pre-trained GloVe embeddings combined with L2 regularization to represent words in a continuous vector space.
+
+% \textbf{GloVe Embeddings:}
+% Words are represented in a continuous vector space using pre-trained GloVe embeddings.
+
+% \textbf{L2 Regularization:}
+% Incorporates L2 regularization to impose a penalty on the squared magnitude of the model's weights. Enhances generalization by preventing overfitting and improving the robustness of the learned representations.
+
+% \textbf{Bidirectional LSTM Layer:}
+% Employs a bidirectional LSTM layer to capture contextual information from both past and future time steps.
+
+% \textbf{Layer Normalization:}
+% Applies layer normalization to normalize the output of the LSTM layer, enhancing training stability.
+
+% \textbf{Dropout Layer:}
+% Incorporates dropout with a rate of 0.8 to prevent overfitting by randomly dropping out a fraction of units during training.
+
+% \textbf{TimeDistributed Dense Layer:}
+% Utilizes a TimeDistributed dense layer for sequence-to-sequence mapping.
+
+\subsubsection{Instruction Generator Training Details}
+The model is trained using the Adam optimizer, with categorical cross-entropy used as the loss function. In addition to accuracy, perplexity was chosen as a validation metric 
+\cite{10.1121/1.2016299_orig_4}. Both metrics are monitored throughout training and early stopping is employed to halt training if validation perplexity does not improve after three consecutive epochs, with the best weights restored.
+
+\section{Experiments and Results}
+
+\subsection{Stage 1 --- Ingredient Prediction}
+Ingredient prediction model hyperparameters were explored using random search. Our goal in our searches were to find a set of parameters for which we could achieve at least 0.1 validation IoU. Although this seems low, we realized that this would still be difficult for us. For both ResNet-50 and custom architectures, 30 individual training runs were performed. After each training run, metrics and model weights were stored for evaluation and comparison.
+
+\subsubsection{Custom CNN Architecture}
+For our custom CNN architecture, we explored batch sizes of 32, 64, and 128, the number of convolutional blocks used (3, 4, or 5), learning rates of 1e-3, 1e-4, and 1e-5, image augmentation, and regularization. For this architecture, the hyperparameter "regularization" referred to the presence of both a dropout rate of 0.7 before the final layer and L2 regularization of 1e-3 on the hidden fully-connected layer. When image augmentation was disabled, only image rescaling was applied to ensure input image sizes were uniform. Mean per-hyperparameter-value IoU scores can be seen in Figure 1.
+
+When reviewing results for our custom CNN architecture, we find that a lower batch size generally produced a higher validation IoU score. This could be due to the additional training steps per epoch offered by a lower batch size, or it could be that the natural regularizing effect of a lower batch size improved generalization of the model. We also find that a larger number of convolutional blocks greatly improves performance. This is likely due to the more complex filter representations offered by deeper convolutional models. Finally, we find that our explicit regularization scheme hindered our model's validation accuracy. It is likely that our regularization amounts (an L2 regularization rate of 1e-3 and a dropout rate of 0.7) limited our weights and hindered information transfer to the final classification layer.
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{custom-iou-params.png}
+\end{center}
+\caption{Average IoU scores for our custom CNN architecture by select hyperparameter values}
+\label{fig:onecol}
+\end{figure}
+
+After this search completed, the optimal set of hyperparameters was determined to be a batch size of 128, 4 convolutional blocks, a learning rate of 1e-3, with both augmentation and regularization disabled. This configuration resulted in an validation IoU score of 0.075. However, this custom CNN model was not successful in reaching our goal of ingredient prediction.
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.7\linewidth]{best-custom-run.png}
+\end{center}
+\caption{Training and validation metrics for the best found hyperparameters set on our custom CNN architecture, by epoch}
+\label{fig:onecol}
+\end{figure}
+
+\subsubsection{ResNet-50 Architecture}
+For our ResNet-50-powered architecture, we searched batch sizes of 32, 128, and 512, learning rates of 1e-3, 1e-4, and 1e-5, augmentation, and dropout rates of 0, 0.3, and 0.7. Mean IoU scores for each hyperparameter value IoU scores can be seen in Figure 3.
+
+We find that batch size had a lesser effect on this architecture than with our custom CNN architecture, although a lower batch size of 32 still produced a higher validation IoU on average. Learning rate, however, proved to be a very influential hyperparameter, resulting in an increase to validation IoU by around 50\% on average between the lowest and highest learning rates tested. A larger learning rate results in larger gradient steps taken during weight updates. A combination of the Adam optimizer and utilizing ResNet-50 as a fixed feature extractor may have allowed the final ingredient prediction layer to take these larger gradient steps while still settling in an acceptable minimum. Finally, image augmentation did not play as large of a role as we had hoped across either model architecture. This could be due to our task being a multi-label classification problem. Another potential explanation is that our training data was adequate varied when compared to our validation data.
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{resnet-iou-params.png}
+\end{center}
+\caption{Average IoU scores for our ResNet-50 architecture by select hyperparameter values}
+\label{fig:onecol}
+\end{figure}
+
+The hyperparameter search for the ResNet-50-powered architecture resulted in a batch size of 512, dropout of 0, and learning rate of 1e-3. This hyperparameter set resulted in a validation IoU score of 0.106. This CNN achieved the goal set by our team. It is important to note that although validation scores may be higher for some hyperparameter values, it does not guarantee that the combination of all the highest-scoring values will result in a superior model. Comparisons such as these therefore offer more insight when analyzing performance across a single hyperparameter's values.
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.7\linewidth]{best-resnet-run.png}
+\end{center}
+\caption{Training and validation metrics for the best found hyperparameters set on our ResNet-50-powered architecture, by epoch}
+\label{fig:onecol}
+\end{figure}
+
+\subsubsection{Comparing Ingredient Prediction Architectures}
+As expected, utilizing a pre-trained ResNet-50 model provided higher performance than our custom CNN model, given the amount of training time and resources available. For this reason, we selected the ResNet-50 model for final ingredient predictor evaluation purposes. It is possible that a custom model architecture could outperform our transfer learning approach. However, the ability to reuse existing models to reduce training time can not be understated.
+
+On the test dataset, our ResNet-50 model obtained an IoU score of 0.119, which is higher than its performance on the validation set.
+
+We use a comparatively low confidence threshold of 0.05 when performing ingredient prediction, as when using the validation threshold of 0.5, too few ingredients are predicted for each input image. When analyzing ingredient prediction results, we find that our model performs best when identifying presence of garnishes. However, our model's performance suffers from over-predicting common ingredients such as salt, sugar, olive oil, and lemon juice. One notable result, however, is that our model identified that a recipe contains water, although the true recipe ingredients did not mention water (See Table 2 in appendix).
+
+\subsection{Stage 2 --- Instruction Generation}
+In stage 2, our focus is on generating a coherent set of instructions that can be used to recreate a recipe with the given ingredients. The evaluation of our generated recipe steps involves both human judgment and automated metrics. The primary automated metric we chose to employ for our instruction generation task is perplexity. Perplexity is calculated through cross-entropy and serves as an automated measure of a model's predictive capability. It quantifies the average uncertainty of the model for each dataset sample, with lower perplexity indicating superior predictive performance. Our goal was to achieve a validation perplexity of below 500.
+
+In the absence of a pre-trained model, a significant gap between training and validation perplexity would suggest overfitting. To mitigate this, we utilize pre-trained GloVe embeddings, observing a decrease in both training and validation loss perplexity with increasing epochs. Results of this can be seen in Figures 5 and 6.
+
+\subsubsection{Model Architecture Experiments}
+
+We experiment with a varying number of LSTM units, pre-trained GloVe embeddings, learning rate, batch size, and several regularization methods. We explored LSTM sizes of 8, 16, 32, and 64 units, learning rates of 1e-1, 1e-3, 5e-4, and 1e-4, and batch sizes of 8, 16, 32, and 64. For regularization methods, we explored the effects of dropout, L2 regularization, and layer normalization.
+
+Through our experimentation, we find GloVe embedding sizes of both 50 and 100 result in better performance over a model without pre-trained GloVe embeddings. There was no noticeable difference in validation metrics between an embedding size of 50 or 100, so 50 was chosen in favor of model execution speed. This performance increase is expected, as GloVe embeddings map words into a global space by a semantic similarity metric.
+
+While experimenting with our LSTM layer, we find that a bidirectional LSTM offers better performance than a standard LSTM layer. This could be due to our treating ingredients as a set, rather than as a list. By using a bidirectional layer, more context from both ends of the ingredient sequence is preserved. We also find through experimentation that an LSTM size of 8 units was optimal for our task; higher values led to increased memory usage and higher perplexity scores.
+
+We find that by employing a dropout rate of 0.8, L2 regularization of 1e-2, and layer normalization, our validation perplexity can be further improved. These regularization methods prevent the LSTM model from overfitting to our training data and offer better generalization capabilities.
+
+\subsubsection{Model comparison}
+
+Our LSTM model that did not use GloVe embeddings repeatedly generated common words such as "and" and "the". Comparatively, we find that by employing GloVe embeddings and regularization methods, a much better validation perplexity and generative output can be achieved. Results of this can be found in Table 1 in the Appendix. For this second model, the optimal set of hyperparameters was a learning rate of 1e-2, a batch size of 64, and a training length of 15 epochs. These improvements resulted in a validation perplexity of 434.413 --- an increase over our model without pre-trained GloVe embeddings, which had a validation perplexity of 529.227. The model that used pre-trained embeddings achieved our goal of under 500 validation perplexity while the model without pre-trained embeddings did not.
+
+\begin{figure}[t]
+\begin{center}
+% \fbox{\rule{0pt}{2in} \rule{0.9\linewidth}{0pt}}
+   \includegraphics[width=1\linewidth]{lstm1.png}
+\end{center}
+   \caption{LSTM without Using Pre-trained Model}
+% \label{fig:long}
+\label{fig:onecol}
+\end{figure}
+
+\begin{figure}[t]
+\begin{center}
+% \fbox{\rule{0pt}{2in} \rule{0.9\linewidth}{0pt}}
+   \includegraphics[width=1\linewidth]{lstm2.png}
+\end{center}
+   \caption{LSTM Using Pre-trained Model}
+% \label{fig:long}
+\label{fig:onecol}
+\end{figure}
+
+\section{Conclusion}
+
+\subsection{Dataset Considerations}
+
+For our LSTM model, the small gap between training and validation perplexity indicates no overfitting. However, our limited dataset size (approximately 240 Megabytes) is acknowledged. While our pragmatic compromise considers hardware limitations, utilizing a larger training dataset often benefits deep learning models and should produce better results on both ingredient prediction and instruction generation tasks.
+
+One issue that heavily impacted ingredient prediction was that of class imbalance. By taking additional measures to mitigate the effects of class imbalance, a more robust Image-to-Recipe Translation model could be produced. One measure to investigate is class weighting, which decreases the impact of common classes on the loss value, and increases the impact of rarer classes.
+
+\subsection{Future Steps and Model Consideration}
+
+In addition to an increased dataset size, one future initiative for instruction generation is to explore advanced architectures such as transformer-based models. The study "Inverse Cooking: Recipe Generation from Food Image" \cite{Salvador_Drozdzal_Giro-i-Nieto_Romero_2019_orig_2} underscores their efficacy on larger datasets. In particular, by utilizing an R Transformer-based architecture, a text instruction generation model could be trained on datasets of a much larger scale.
+
+Additional future work includes model deployment and user feedback. Once a performant Image-to-Recipe Translation model is developed, it could be deployed as a web or mobile application for others across the world to use. Users could then provide valuable feedback or even contribute data to further improve the model.
+
+In conclusion, transfer learning and dataset size are very influential in the task of Image-to-Recipe Translation. Architectures, such as transformers, represent a viable path for further improving instruction generation. These factors are likely to play significant roles in determining the evolution of recipe instruction generation models as the fields of CV and NLG progress.
+
+\section{Work Division}
+Summary of work contributions and respective details for each team member can be seen in Table 3.
+
+
+
+
+% \textbf{(10 points)} How did you measure success? What experiments were used? What were the results, both quantitative and qualitative? Did you succeed? Did you fail? Why? Justify your reasons with arguments supported by evidence and data.
+
+% \textbf{Important: This section should be rigorous and thorough. Present detailed information about decision you made, why you made them, and any evidence/experimentation to back them up. This is especially true if you leveraged existing architectures, pre-trained models, and code (i.e. do not just show results of fine-tuning a pre-trained model without any analysis, claims/evidence, and conclusions, as that tends to not make a strong project). }
+
+%-------------------------------------------------------------------------
+
+
+
+% You are welcome to introduce additional sections or subsections, if required, to address the following questions in detail. 
+
+% \textbf{(5 points)} Appropriate use of figures / tables / visualizations. Are the ideas presented with appropriate illustration? Are the results presented clearly; are the important differences illustrated? 
+
+% \textbf{(5 points)} Overall clarity. Is the manuscript self-contained? Can a peer who has also taken Deep Learning understand all of the points addressed above? Is sufficient detail provided? 
+
+% \textbf{(5 points)} Finally, points will be distributed based on your understanding of how your project relates to Deep Learning. Here are some questions to think about: 
+
+% What was the structure of your problem? How did the structure of your model reflect the structure of your problem? 
+
+% What parts of your model had learned parameters (e.g., convolution layers) and what parts did not (e.g., post-processing classifier probabilities into decisions)? 
+
+% What representations of input and output did the neural network expect? How was the data pre/post-processed?
+% What was the loss function? 
+
+% Did the model overfit? How well did the approach generalize? 
+
+% What hyperparameters did the model have? How were they chosen? How did they affect performance? What optimizer was used? 
+
+% What Deep Learning framework did you use? 
+
+% What existing code or models did you start with and what did those starting points provide? 
+
+% Briefly discuss potential future work that the research community could focus on to make improvements in the direction of your project's topic.
+
+
+%-------------------------------------------------------------------------
+
+% \section{Work Division}
+
+% Please add a section on the delegation of work among team members at the end of the report, in the form of a table and paragraph description. This and references do \textbf{NOT} count towards your page limit. An example has been provided in Table \ref{tab:contributions}.
+
+% \newpage
+% \newpage
+% \section{Miscellaneous Information}
+
+% The rest of the information in this format template has been adapted from CVPR 2020 and provides guidelines on the lower-level specifications regarding the paper's format.
+
+% \subsection{Language}
+
+% All manuscripts must be in English.
+
+
+% \subsection{Paper length}
+% Papers, excluding the references section,
+% must be no longer than six pages in length. The references section
+% will not be included in the page count, and there is no limit on the
+% length of the references section. For example, a paper of six pages
+% with two pages of references would have a total length of 8 pages.
+
+%-------------------------------------------------------------------------
+% \subsection{The ruler}
+% The \LaTeX\ style defines a printed ruler which should be present in the
+% version submitted for review.  The ruler is provided in order that
+% reviewers may comment on particular lines in the paper without
+% circumlocution.  If you are preparing a document using a non-\LaTeX\
+% document preparation system, please arrange for an equivalent ruler to
+% appear on the final output pages.  The presence or absence of the ruler
+% should not change the appearance of any other content on the page.  The
+% camera ready copy should not contain a ruler. (\LaTeX\ users may uncomment
+% the \verb'\cvprfinalcopy' command in the document preamble.)  Reviewers:
+% note that the ruler measurements do not align well with lines in the paper
+% --- this turns out to be very difficult to do well when the paper contains
+% many figures and equations, and, when done, looks ugly.  Just use fractional
+% references (e.g.\ this line is $095.5$), although in most cases one would
+% expect that the approximate location will be adequate.
+
+% \subsection{Mathematics}
+
+% Please number all of your sections and displayed equations.  It is
+% important for readers to be able to refer to any particular equation.  Just
+% because you didn't refer to it in the text doesn't mean some future reader
+% might not need to refer to it.  It is cumbersome to have to use
+% circumlocutions like ``the equation second from the top of page 3 column
+% 1''.  (Note that the ruler will not be present in the final copy, so is not
+% an alternative to equation numbers).  All authors will benefit from reading
+% Mermin's description of how to write mathematics:
+% \url{http://www.pamitc.org/documents/mermin.pdf}.
+
+% Finally, you may feel you need to tell the reader that more details can be
+% found elsewhere, and refer them to a technical report.  For conference
+% submissions, the paper must stand on its own, and not {\em require} the
+% reviewer to go to a techreport for further details.  Thus, you may say in
+% the body of the paper ``further details may be found
+% in~\cite{Authors14b}''.  Then submit the techreport as additional material.
+% Again, you may not assume the reviewers will read this material.
+
+% Sometimes your paper is about a problem which you tested using a tool which
+% is widely known to be restricted to a single institution.  For example,
+% let's say it's 1969, you have solved a key problem on the Apollo lander,
+% and you believe that the CVPR70 audience would like to hear about your
+% solution.  The work is a development of your celebrated 1968 paper entitled
+% ``Zero-g frobnication: How being the only people in the world with access to
+% the Apollo lander source code makes us a wow at parties'', by Zeus \etal.
+
+% You can handle this paper like any other.  Don't write ``We show how to
+% improve our previous work [Anonymous, 1968].  This time we tested the
+% algorithm on a lunar lander [name of lander removed for blind review]''.
+% That would be silly, and would immediately identify the authors. Instead
+% write the following:
+% \begin{quotation}
+% \noindent
+%    We describe a system for zero-g frobnication.  This
+%    system is new because it handles the following cases:
+%    A, B.  Previous systems [Zeus et al. 1968] didn't
+%    handle case B properly.  Ours handles it by including
+%    a foo term in the bar integral.
+
+%    ...
+
+%    The proposed system was integrated with the Apollo
+%    lunar lander, and went all the way to the moon, don't
+%    you know.  It displayed the following behaviours
+%    which show how well we solved cases A and B: ...
+% \end{quotation}
+% As you can see, the above text follows standard scientific convention,
+% reads better than the first version, and does not explicitly name you as
+% the authors.  A reviewer might think it likely that the new paper was
+% written by Zeus \etal, but cannot make any decision based on that guess.
+% He or she would have to be sure that no other authors could have been
+% contracted to solve problem B.
+% \medskip
+
+% \noindent
+% FAQ\medskip\\
+% {\bf Q:} Are acknowledgements OK?\\
+% {\bf A:} No.  Leave them for the final copy.\medskip\\
+% {\bf Q:} How do I cite my results reported in open challenges?
+% {\bf A:} To conform with the double blind review policy, you can report results of other challenge participants together with your results in your paper. For your results, however, you should not identify yourself and should not mention your participation in the challenge. Instead present your results referring to the method proposed in your paper and draw conclusions based on the experimental comparison to other results.\medskip\\
+
+% \begin{figure}[t]
+% \begin{center}
+% \fbox{\rule{0pt}{2in} \rule{0.9\linewidth}{0pt}}
+%    %\includegraphics[width=0.8\linewidth]{egfigure.eps}
+% \end{center}
+%    \caption{Example of caption.  It is set in Roman so that mathematics
+%    (always set in Roman: $B \sin A = A \sin B$) may be included without an
+%    ugly clash.}
+% \label{fig:long}
+% \label{fig:onecol}
+% \end{figure}
+
+% \subsection{Miscellaneous}
+
+% \noindent
+% Compare the following:\\
+% \begin{tabular}{ll}
+%  \verb'$conf_a$' &  $conf_a$ \\
+%  \verb'$\mathit{conf}_a$' & $\mathit{conf}_a$
+% \end{tabular}\\
+% See The \TeX book, p165.
+
+% The space after \eg, meaning ``for example'', should not be a
+% sentence-ending space. So \eg is correct, {\em e.g.} is not.  The provided
+% \verb'\eg' macro takes care of this.
+
+% When citing a multi-author paper, you may save space by using ``et alia'',
+% shortened to ``\etal'' (not ``{\em et.\ al.}'' as ``{\em et}'' is a complete word.)
+% However, use it only when there are three or more authors.  Thus, the
+% following is correct: ``
+%    Frobnication has been trendy lately.
+%    It was introduced by Alpher~\cite{Alpher02}, and subsequently developed by
+%    Alpher and Fotheringham-Smythe~\cite{Alpher03}, and Alpher \etal~\cite{Alpher04}.''
+
+% This is incorrect: ``... subsequently developed by Alpher \etal~\cite{Alpher03} ...''
+% because reference~\cite{Alpher03} has just two authors.  If you use the
+% \verb'\etal' macro provided, then you need not worry about double periods
+% when used at the end of a sentence as in Alpher \etal.
+
+% For this citation style, keep multiple citations in numerical (not
+% chronological) order, so prefer \cite{Alpher03,Alpher02,Authors14} to
+% \cite{Alpher02,Alpher03,Authors14}.
+
+
+% \begin{figure*}
+% \begin{center}
+% \fbox{\rule{0pt}{2in} \rule{.9\linewidth}{0pt}}
+% \end{center}
+%    \caption{Example of a short caption, which should be centered.}
+% \label{fig:short}
+% \end{figure*}
+
+%------------------------------------------------------------------------
+% \subsection{Formatting your paper}
+
+% All text must be in a two-column format. The total allowable width of the
+% text area is $6\frac78$ inches (17.5 cm) wide by $8\frac78$ inches (22.54
+% cm) high. Columns are to be $3\frac14$ inches (8.25 cm) wide, with a
+% $\frac{5}{16}$ inch (0.8 cm) space between them. The main title (on the
+% first page) should begin 1.0 inch (2.54 cm) from the top edge of the
+% page. The second and following pages should begin 1.0 inch (2.54 cm) from
+% the top edge. On all pages, the bottom margin should be 1-1/8 inches (2.86
+% cm) from the bottom edge of the page for $8.5 \times 11$-inch paper; for A4
+% paper, approximately 1-5/8 inches (4.13 cm) from the bottom edge of the
+% page.
+
+%-------------------------------------------------------------------------
+% \subsection{Margins and page numbering}
+
+% All printed material, including text, illustrations, and charts, must be kept
+% within a print area 6-7/8 inches (17.5 cm) wide by 8-7/8 inches (22.54 cm)
+% high.
+
+
+
+%-------------------------------------------------------------------------
+% \subsection{Type-style and fonts}
+
+% Wherever Times is specified, Times Roman may also be used. If neither is
+% available on your word processor, please use the font closest in
+% appearance to Times to which you have access.
+
+% MAIN TITLE. Center the title 1-3/8 inches (3.49 cm) from the top edge of
+% the first page. The title should be in Times 14-point, boldface type.
+% Capitalize the first letter of nouns, pronouns, verbs, adjectives, and
+% adverbs; do not capitalize articles, coordinate conjunctions, or
+% prepositions (unless the title begins with such a word). Leave two blank
+% lines after the title.
+
+% AUTHOR NAME(s) and AFFILIATION(s) are to be centered beneath the title
+% and printed in Times 12-point, non-boldface type. This information is to
+% be followed by two blank lines.
+
+% The ABSTRACT and MAIN TEXT are to be in a two-column format.
+
+% MAIN TEXT. Type main text in 10-point Times, single-spaced. Do NOT use
+% double-spacing. All paragraphs should be indented 1 pica (approx. 1/6
+% inch or 0.422 cm). Make sure your text is fully justified---that is,
+% flush left and flush right. Please do not place any additional blank
+% lines between paragraphs.
+
+% Figure and table captions should be 9-point Roman type as in
+% Figures~\ref{fig:onecol} and~\ref{fig:short}.  Short captions should be centred.
+
+% \noindent Callouts should be 9-point Helvetica, non-boldface type.
+% Initially capitalize only the first word of section titles and first-,
+% second-, and third-order headings.
+
+% FIRST-ORDER HEADINGS. (For example, {\large \bf 1. Introduction})
+% should be Times 12-point boldface, initially capitalized, flush left,
+% with one blank line before, and one blank line after.
+
+% SECOND-ORDER HEADINGS. (For example, { \bf 1.1. Database elements})
+% should be Times 11-point boldface, initially capitalized, flush left,
+% with one blank line before, and one after. If you require a third-order
+% heading (we discourage it), use 10-point Times, boldface, initially
+% capitalized, flush left, preceded by one blank line, followed by a period
+% and your text on the same line.
+
+%-------------------------------------------------------------------------
+% \subsection{Footnotes}
+
+% Please use footnotes\footnote {This is what a footnote looks like.  It
+% often distracts the reader from the main flow of the argument.} sparingly.
+% Indeed, try to avoid footnotes altogether and include necessary peripheral
+% observations in
+% the text (within parentheses, if you prefer, as in this sentence).  If you
+% wish to use a footnote, place it at the bottom of the column on the page on
+% which it is referenced. Use Times 8-point type, single-spaced.
+
+
+%-------------------------------------------------------------------------
+% \subsection{References}
+
+% List and number all bibliographical references in 9-point Times,
+% single-spaced, at the end of your paper. When referenced in the text,
+% enclose the citation number in square brackets, for
+% example~\cite{Authors14}.  Where appropriate, include the name(s) of
+% editors of referenced books \cite{recipe1707}.
+
+% \begin{table}
+% \begin{center}
+% \begin{tabular}{|l|c|}
+% \hline
+% Method & Frobnability \\
+% \hline\hline
+% Theirs & Frumpy \\
+% Yours & Frobbly \\
+% Ours & Makes one's heart Frob\\
+% \hline
+% \end{tabular}
+% \end{center}
+% \caption{Results.   Ours is better.}
+% \end{table}
+
+%-------------------------------------------------------------------------
+% \subsection{Illustrations, graphs, and photographs}
+
+% All graphics should be centered.  Please ensure that any point you wish to
+% make is resolvable in a printed copy of the paper.  Resize fonts in figures
+% to match the font in the body text, and choose line widths which render
+% effectively in print.  Many readers (and reviewers), even of an electronic
+% copy, will choose to print your paper in order to read it.  You cannot
+% insist that they do otherwise, and therefore must not assume that they can
+% zoom in to see tiny details on a graphic.
+
+% When placing figures in \LaTeX, it's almost always best to use
+% \verb+\includegraphics+, and to specify the  figure width as a multiple of
+% the line width as in the example below
+% {\small\begin{verbatim}
+%    \usepackage[dvips]{graphicx} ...
+%    \includegraphics[width=0.8\linewidth]
+%                    {myfile.eps}
+% \end{verbatim}
+% }
+
+
+%-------------------------------------------------------------------------
+% \subsection{Color}
+
+% Please refer to the author guidelines on the CVPR 2020 web page for a discussion
+% of the use of color in your document.
+
+%------------------------------------------------------------------------
+
+%-------------------------------------------------------------------------
+
+
+{\small
+\bibliographystyle{ieee_fullname}
+\bibliography{egbib}
+}
+
+% \end{document}
+
+% Add these lines to your LaTeX document, typically before \end{document}
+
+% \begin{thebibliography}{99}
+
+% \bibitem{muriz2018}
+% Muriz, 2018, "Image-to-Recipe Translation with Deep Convolutional Neural Networks"
+% \url{https://towardsdatascience.com/this-ai-is-hungry-b2a8655528be}
+
+% \bibitem{salvador2019}
+% Salvador et al., 2019, "Inverse Cooking: Recipe Generation from Food Images"
+% \url{https://research.facebook.com/publications/inverse-cooking-recipe-generation-from-food-images}
+
+% \bibitem{salvador2017}
+% Salvador et al., 2017, "Recipe1M+: A Dataset for Learning Cross-Modal Embeddings for Cooking Recipes and Food Images"
+% \url{http://pic2recipe.csail.mit.edu}
+
+% \bibitem{jelinek1977}
+% Jelinek, F.; Mercer, R. L.; Bahl, L. R.; Baker, J. K., 1977, "Perplexity—a measure of the difficulty of speech recognition tasks"
+% \url{https://doi.org/10.1121/1.2016299}
+
+% \end{thebibliography}
+% \appendix
+% % \section{Appendix}
+% % Content of the first appendix section
+% \begin{table*}
+% \begin{center}
+% \begin{tabular}{|l|c|p{8cm}|}
+% \hline
+% Student Name & Contributed Aspects & Details \\
+% \hline\hline
+%  Franz Williams & Data creation and implementation & Acquired the dataset for this project and trained the CNN of the encoder. \\
+% Jiangqin Ma & Implementation and analysis & Implemented and trained custom CNN. Implemented and trained the LSTM and analyzed the results.  \\
+%  Bilal Mawji & Data cleaning and analysis & Trained and improve the models performance.\\
+% \hline
+% \end{tabular}
+% \end{center}
+% \caption{Contributions of team members.}
+% \label{tab:contributions}
+% \end{table*}
+
+% % \section{Appendix}
+
+% \begin{figure}[t]
+% \begin{center}
+%    \includegraphics[width=0.8\linewidth]{chicken.png}
+% \end{center}
+% \caption{Tested Food Image}
+% \label{fig:onecol}
+% \end{figure}
+
+% % \section{Appendix}
+% \begin{table*}
+%     \centering
+%     \begin{tabular}{|p{2cm}|c|p{5cm}|p{7cm}|}
+%         \hline
+%         Model & Perplexity  & Input Ingredients & Predicted Output \\
+%         \hline\hline
+%         LSTM without Using Pre-trained Model & 532.5060 & ['chicken',
+%         'salt',
+%         'acorn squash',
+%         'squash',
+%         'sage',
+%         'rosemary',
+%         'butter',
+%         'salt',
+%         'allspice',
+%         'pepper',
+%         'black pepper',
+%         'pepper',
+%         'bread',
+%         'pie',
+%         'white bread',
+%         'apple',
+%         'pie',
+%         'gin',
+%         'oil',
+%         'olive',
+%         'olive oil',
+%         'onion',
+%         'red onion',
+%         'apple',
+%         'cider',
+%         'vinegar',
+%         'miso',
+%         'flour',
+%         'butter',
+%         'salt',
+%         'white wine',
+%         'wine',
+%         'broth',
+%         'chicken',
+%         'salt',
+%         'miso',
+%         'salt',
+%         'pepper'] & a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d  \\
+%         LSTM Using Pre-trained Model & 442.9162 & ['chicken',
+%         'salt',
+%         'acorn squash',
+%         'squash',
+%         'sage',
+%         'rosemary',
+%         'butter',
+%         'salt',
+%         'allspice',
+%         'pepper',
+%         'black pepper',
+%         'pepper',
+%         'bread',
+%         'pie',
+%         'white bread',
+%         'apple',
+%         'pie',
+%         'gin',
+%         'oil',
+%         'olive',
+%         'olive oil',
+%         'onion',
+%         'red onion',
+%         'apple',
+%         'cider',
+%         'vinegar',
+%         'miso',
+%         'flour',
+%         'butter',
+%         'salt',
+%         'white wine',
+%         'wine',
+%         'broth',
+%         'chicken',
+%         'salt',
+%         'miso',
+%         'salt',
+%         'pepper'] & ['and the to a in with until 1 minutes of 2 add heat over about bowl salt into on medium then 4 large oil or 3 for is cook water mixture transfer pan pepper oven at remaining from baking stir let sugar place cup cover butter stirring cool top it skillet 5 if small remove be season using dough each ahead inch whisk high serve are set sheet sauce cut brown up preheat can side garlic 10 pot bring occasionally golden boil toss combine saucepan flour sprinkle bake just out simmer chill cream rack pour juice temperature spoon chicken tablespoons through as hours all more lemon tender half together you teaspoon mix 8 smooth grill an sides lightly 30 room heavy do will paper low 6 not cake drain beat onion hot 15 made egg cups before coat liquid slightly well tablespoon dry bottom gently reduce warm off center but down cheese spread minute aside least them stand by ice ingredients your 20 dish pieces eggs turn surface keep cooking foil parchment onto wrap thick divide very arrange vinegar cooked hour blend serving when milk slices chocolate 12 use drizzle potatoes any browned brush meanwhile plate make seeds completely evenly taste turning covered one put pasta layer time bread tbsp roast rimmed meat another processor discard sauté syrup roll platter knife some filling batter form powder peel leaves tomatoes cold slice vanilla rice around fold once broth skin olive return fish onions vegetables soft pork reserved crisp prepared edges']  \\
+%         \hline
+%     \end{tabular}
+%     \caption{Comparison of Models' Output}
+%     \label{tab:contributions}
+% \end{table*}
+
+
+
+
+% \end{document}
+
+
+% End of the main body
+\clearpage  % or \newpage
+
+\appendix
+\section{APPENDIX}
+
+
+
+% Content of the second appendix section
+
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{chicken.png}
+\end{center}
+\caption{Stage 2 Tested Food Image}
+\label{fig:onecol}
+\end{figure}
+
+% Content of the first appendix section
+
+
+
+
+% Content of the third appendix section
+\begin{table*}
+    \centering
+    \begin{tabular}{|p{2cm}|c|p{5cm}|p{7cm}|}
+        \hline
+        Model & Perplexity  & Input Ingredients & Predicted Output \\
+        \hline\hline
+        LSTM without Using Pre-trained Model & 532.5060 & chicken,
+        salt,
+        acorn squash,
+        squash,
+        sage,
+        rosemary,
+        butter,
+        salt,
+        allspice,
+        pepper,
+        black pepper,
+        pepper,
+        bread,
+        pie,
+        white bread,
+        apple,
+        pie,
+        gin,
+        oil,
+        olive,
+        olive oil,
+        onion,
+        red onion,
+        apple,
+        cider,
+        vinegar,
+        miso,
+        flour,
+        butter,
+        salt,
+        white wine,
+        wine,
+        broth,
+        chicken,
+        salt,
+        miso,
+        salt,
+        pepper & a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d   a n d  \\
+        LSTM Using Pre-trained Model & 442.9162 & chicken,
+        salt,
+        acorn squash,
+        squash,
+        sage,
+        rosemary,
+        butter,
+        salt,
+        allspice,
+        pepper,
+        black pepper,
+        pepper,
+        bread,
+        pie,
+        white bread,
+        apple,
+        pie,
+        gin,
+        oil,
+        olive,
+        olive oil,
+        onion,
+        red onion,
+        apple,
+        cider,
+        vinegar,
+        miso,
+        flour,
+        butter,
+        salt,
+        white wine,
+        wine,
+        broth,
+        chicken,
+        salt,
+        miso,
+        salt,
+        pepper & and the to a in with until 1 minutes of 2 add heat over about bowl salt into on medium then 4 large oil or 3 for is cook water mixture transfer pan pepper oven at remaining from baking stir let sugar place cup cover butter stirring cool top it skillet 5 if small remove be season using dough each ahead inch whisk high serve are set sheet sauce cut brown up preheat can side garlic 10 pot bring occasionally golden boil toss combine saucepan flour sprinkle bake just out simmer chill cream rack pour juice temperature spoon chicken tablespoons through as hours all more lemon tender half together you teaspoon mix 8 smooth grill an sides lightly 30 room heavy do will paper low 6 not cake drain beat onion hot 15 made egg cups before coat liquid slightly well tablespoon dry bottom gently reduce warm off center but down cheese spread minute aside least them stand by ice ingredients your 20 dish pieces eggs turn surface keep cooking foil parchment onto wrap thick divide very arrange vinegar cooked hour blend serving when milk slices chocolate 12 use drizzle potatoes any browned brush meanwhile plate make seeds completely evenly taste turning covered one put pasta layer time bread tbsp roast rimmed meat another processor discard sauté syrup roll platter knife some filling batter form powder peel leaves tomatoes cold slice vanilla rice around fold once broth skin olive return fish onions vegetables soft pork reserved crisp prepared edges  \\
+        \hline
+    \end{tabular}
+    \caption{Comparison of stage 2 models' output (See Figure 7)}
+    \label{tab:contributions}
+\end{table*}
+
+% \vbox{} % Empty vbox to force vertical space
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{resnet-f1.png}
+\end{center}
+\caption{ResNet-50 model F1 scores}
+\label{fig:onecol}
+\end{figure}
+
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{custom-cnn-f1.png}
+\end{center}
+\caption{Our custom CNN model F1 scores}
+\label{fig:onecol}
+\end{figure}
+
+
+\begin{table*}
+    \centering
+    \begin{tabular}{|p{5cm}|p{5cm}|p{5cm}|}
+        \hline
+        Image & True Ingredients & Predicted Ingredients \\
+        \hline\hline
+        \includegraphics[width=1\linewidth]{pred-1.png} & 
+        allspice, bay leaf, black peppercorns, dijon mustard, dill, lemon zest, mayonnaise, onion, sour cream, tarragon &
+        black pepper, garlic cloves, lemon juice, salt, sugar, unsalted butter, water, whipping cream \\
+        \hline
+        \includegraphics[width=1\linewidth]{pred-2.png} & 
+        coriander seeds, creme fraiche, lemon peel, olive oil, sour cream, vegetable broth &
+        black pepper, garlic cloves, heavy cream, lemon juice, lemon zest, lime juice, olive oil, parsley, salt, sugar \\
+        \hline
+        \includegraphics[width=1\linewidth]{pred-3.png} & 
+        ice, lime juice, simple syrup &
+        black pepper, lemon juice, lime juice, milk, olive oil, salt, sugar \\
+        \hline
+    \end{tabular}
+    \caption{Select ingredient predictions and true ingredient list}
+    \label{tab:contributions}
+\end{table*}
+
+
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{conv-block.drawio.png}
+\end{center}
+\caption{Our custom CNN model's convolutional block consisting of 3x3 conv, batch norm, and 2x2 max pooling layers}
+\label{fig:onecol}
+\end{figure}
+
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=1\linewidth]{custom-model.drawio.png}
+\end{center}
+\caption{An example configuration of our custom CNN model architecture. Each model tested consisted of 3-5 convolutional blocks, followed by flatten and two fully-connected layers.}
+\label{fig:onecol}
+\end{figure}
+
+\begin{figure}[ht]
+\begin{center}
+   \includegraphics[width=1\linewidth]{resnet-model.drawio.png}
+\end{center}
+\caption{Our ResNet-50 model architecture using ResNet-50 as a fixed feature extractor followed by global average pooling and a final fully-connected ingredient prediction layer}
+\label{fig:onecol}
+\end{figure}
+
+
+% preprocessing, implementation, analysis
+% research
+
+\begin{table*}[ht]
+\centering
+\begin{tabular}{|l|p{4cm}|p{9cm}|}
+\hline
+Student Name & Contributed Aspects & Details \\
+\hline\hline
+Franz Williams & Data acquisition; ResNet-50-based architecture & Acquired project dataset and performed initial dataset cleaning; Developed ResNet-50-based architecture and hyperparameter search method \\
+Jiangqin Ma & Implementation and analysis; Evaluation metric research & Implemented and trained custom CNN. Implemented and trained the LSTM and analyzed the results. Researched evaluation metrics (F1, IoU) and their application to Image-to-Recipe Translation \\
+Bilal Mawji & Data cleaning and analysis; Data augmentation; Model training & Trained and improved the models' performance; Created data augmentation pipeline \\
+\hline
+All members & Live editing; Paper writing & All members contributed in live editing sessions and report writing/review \\
+\hline
+\end{tabular}
+\caption{Contributions of team members}
+\label{tab:contributions}
+\end{table*}
+\end{document}
+
