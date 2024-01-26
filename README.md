@@ -1,5 +1,5 @@
 # Deep Image-to-Recipe Translation
-*Team DeepChef (Bilal Mawji, Franz D Williams, Jiangqin Ma)*  
+*Team DeepChef (Jiangqin Ma, Bilal Mawji, Franz D Williams)*  
 *CS 7643 Final Project*  
 
 ## Summary of files
