@@ -1,6 +1,6 @@
 # Deep Image-to-Recipe Translation
 *Team DeepChef (Jiangqin Ma, Bilal Mawji, Franz D Williams)*  
-*CS 7643 Final Project*  
+
 
 ## Summary of files
 * `deepchef.ipynb` - Iterations on our custom model and recipe step prediction process
