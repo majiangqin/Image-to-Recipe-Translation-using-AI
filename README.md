@@ -1,7 +1,7 @@
 # Deep Image-to-Recipe Translation
 *Team DeepChef (Jiangqin Ma, Bilal Mawji, Franz D Williams)*  
 *The associated paper can be access at :
-http://arxiv.org/abs/2407.00911  
+http://arxiv.org/abs/2407.00911  *
 
 ## Summary of files
 * `deepchef.ipynb` - Iterations on our custom model and recipe step prediction process
